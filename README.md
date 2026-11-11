@@ -8,7 +8,7 @@ Pipeline dữ liệu end-to-end phân tích **khí hậu 20 năm (2005–2025)**
 ![Airflow](https://img.shields.io/badge/Airflow-2.10.5-017CEE?logo=apacheairflow&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white)
 
-> 🚧 **Đang phát triển.** Hạ tầng đã dựng xong, các pipeline đang được xây dựng theo [lộ trình](#-lộ-trình).
+> 🚧 **Đang phát triển.** Hạ tầng đã dựng xong, các pipeline đang được xây dựng theo lộ trình bên dưới.
 
 ## ✨ Điểm nổi bật
 
