@@ -1,141 +1,156 @@
-# DE Lab: Spark · Kafka · Hadoop · Airflow
+# 🌦️ Vietnam Weather Data Pipeline
 
-## 1. Cài đặt (làm một lần)
+Pipeline dữ liệu end-to-end phân tích **khí hậu 20 năm (2005–2025)** và **cảnh báo thời tiết real-time** cho 10 thành phố Việt Nam, xây dựng bằng Hadoop, Spark, Kafka và Airflow.
 
-Mở **PowerShell bằng quyền Administrator**:
+![Hadoop](https://img.shields.io/badge/Hadoop-3.3.6-66CCFF?logo=apachehadoop&logoColor=black)
+![Spark](https://img.shields.io/badge/Spark-3.5.3-E25A1C?logo=apachespark&logoColor=white)
+![Kafka](https://img.shields.io/badge/Kafka-3.9.0-231F20?logo=apachekafka&logoColor=white)
+![Airflow](https://img.shields.io/badge/Airflow-2.10.5-017CEE?logo=apacheairflow&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white)
 
-```powershell
-wsl --install            # cài WSL2 + Ubuntu, xong thì RESTART máy
-winget install -e --id Docker.DockerDesktop
+> 🚧 **Đang phát triển.** Hạ tầng đã dựng xong, các pipeline đang được xây dựng theo [lộ trình](#-lộ-trình).
+
+## ✨ Điểm nổi bật
+
+- **Batch:** xử lý ~1,75 triệu bản ghi thời tiết theo giờ bằng Spark, lưu trên data lake HDFS theo kiến trúc medallion.
+- **Streaming:** thu thập thời tiết hiện tại mỗi 15 phút qua Kafka, Spark Structured Streaming phát cảnh báo nắng nóng, mưa lớn, gió mạnh.
+- **Orchestration:** Airflow điều phối backfill 20 năm và pipeline hằng ngày (ingest → transform → kiểm tra chất lượng → báo cáo).
+- **Hạ tầng dạng code:** toàn bộ cụm chạy bằng Docker Compose, mở được trên GitHub Codespaces mà không cần cài đặt.
+
+## 🏗️ Kiến trúc
+
+```mermaid
+flowchart LR
+    subgraph SRC[Nguồn: Open-Meteo API]
+        A1[Archive API<br/>lịch sử theo giờ]
+        A2[Forecast API<br/>hiện tại, 15 phút/lần]
+    end
+
+    subgraph BATCH[Batch]
+        I[Ingest job] --> B[(HDFS bronze<br/>JSON gốc)]
+        B --> S1[Spark] --> SV[(HDFS silver<br/>Parquet sạch)]
+        SV --> S2[Spark] --> G[(HDFS gold<br/>fact / dim)]
+        G --> R[📊 Báo cáo khí hậu<br/>HTML]
+    end
+
+    subgraph STREAM[Streaming]
+        P[Producer] --> K{{Kafka<br/>weather.current}}
+        K --> SS[Spark Structured<br/>Streaming]
+        SS --> KA{{Kafka<br/>weather.alerts}}
+        SS --> B
+    end
+
+    A1 --> I
+    A2 --> P
+    AF[Airflow] -. điều phối .-> I & S1 & S2 & R
 ```
 
-Sau khi restart, mở Docker Desktop và chờ đến khi hiện "Engine running".
-Trong Settings → General, nhớ bật "Use the WSL 2 based engine".
-
-Giới hạn RAM cho WSL: tạo file `C:\Users\Ngs-MT681\.wslconfig` với nội dung
-
-```ini
-[wsl2]
-memory=10GB
-processors=6
-```
-
-rồi chạy `wsl --shutdown` và mở lại Docker Desktop.
-
-Kiểm tra:
-
-```powershell
-docker version
-docker compose version
-```
-
-### Không có quyền Admin: chạy trên GitHub Codespaces
-
-1. Đẩy thư mục này lên một repo GitHub (để private cũng được).
-2. Trên trang repo, bấm **Code → Codespaces → ⋯ → New with options**, chọn máy **4-core**, rồi **Create codespace**.
-3. Chờ Codespace dựng xong (lần đầu khoảng 3–5 phút). Mở Terminal ngay trong trình duyệt và chạy các lệnh ở mục 2 bên dưới.
-   Thay `docker exec -it ...` bằng đúng lệnh đó, chỉ khác là chạy trong terminal Linux, nên đổi ký tự xuống dòng `` ` `` thành `\`.
-4. Mở tab **Ports** để vào các Web UI.
-5. Làm xong thì **Stop codespace** (menu Codespaces trên github.com) để không tốn quota.
-   Mặc định Codespace tự dừng sau 30 phút không dùng.
-
-Gói miễn phí có 120 core-giờ/tháng. Máy 4-core tương đương khoảng 30 giờ chạy.
-
-## 2. Chạy theo profile
-
-Mọi lệnh dưới đây chạy trong thư mục `C:\Users\Ngs-MT681\de-lab`.
-
-| Profile | Gồm | RAM (ước lượng) |
-|---|---|---|
-| `hadoop` | HDFS namenode + datanode | ~1 GB |
-| `yarn` | ResourceManager + NodeManager | ~1.5 GB |
-| `spark` | Spark master + 1 worker (2 core, 2 GB) | ~3 GB |
-| `kafka` | Kafka KRaft (1 broker) + Kafka UI | ~1.5 GB |
-| `airflow` | Postgres + webserver + scheduler | ~2.5 GB |
-| `all` | tất cả trừ yarn | ~8–9 GB |
-
-```powershell
-docker compose --profile hadoop --profile spark up -d     # học Spark + HDFS
-docker compose --profile kafka up -d                      # học Kafka
-docker compose --profile all up -d --build                # lần đầu có airflow nên cần --build
-docker compose --profile all ps                           # xem trạng thái
-docker compose --profile all down                         # tắt (giữ DB Airflow)
-```
-
-Web UI:
-
-| | URL |
+| Công cụ | Vai trò trong dự án |
 |---|---|
-| HDFS NameNode | http://localhost:9870 |
-| YARN | http://localhost:8088 |
-| Spark master | http://localhost:8090 |
-| Spark job đang chạy | http://localhost:4040 |
-| Kafka UI | http://localhost:8085 |
-| Airflow | http://localhost:8080 (airflow / airflow) |
+| **HDFS** | Data lake 3 tầng: `bronze` (dữ liệu gốc) → `silver` (đã làm sạch, partition theo năm) → `gold` (bảng phục vụ báo cáo) |
+| **Spark** | Làm sạch, chuẩn hóa múi giờ, tổng hợp ngày/tháng/năm, tính xu hướng và bất thường |
+| **Kafka** | Nhận dữ liệu thời tiết hiện tại; key theo thành phố để giữ thứ tự trong từng partition |
+| **Spark Structured Streaming** | Cửa sổ thời gian theo event time + watermark, phát cảnh báo khi vượt ngưỡng |
+| **Airflow** | Lập lịch, phụ thuộc giữa các task, backfill theo năm, retry |
+| **Docker Compose** | Dựng cụm theo profile (`hadoop`, `spark`, `kafka`, `airflow`) để tiết kiệm tài nguyên |
 
-> Dữ liệu HDFS chỉ nằm trong container. `stop`/`start` thì vẫn còn, nhưng `down` thì mất hết.
-> Đây là lab nên chấp nhận được; dữ liệu nguồn đã có sẵn trong `./data`.
+## ❓ Câu hỏi phân tích
 
-## 3. Bài thực hành mẫu
+| # | Câu hỏi | Kết quả |
+|---|---|---|
+| 1 | Mỗi thành phố đã nóng lên bao nhiêu °C trong 20 năm? | _đang thực hiện_ |
+| 2 | Số ngày nắng nóng ≥ 35°C mỗi năm có xu hướng tăng không? | _đang thực hiện_ |
+| 3 | Mùa mưa ba miền Bắc – Trung – Nam lệch nhau thế nào? | _đang thực hiện_ |
+| 4 | Các đợt mưa cực đoan (> 100 mm/ngày) xảy ra khi nào? | _đang thực hiện_ |
+| 5 | Tháng nào bất thường nhất so với trung bình nhiều năm? | _đang thực hiện_ |
+| 6 | Thành phố nào có thời tiết dễ chịu nhất quanh năm? | _đang thực hiện_ |
 
-### Hadoop: thao tác HDFS
-```powershell
-docker exec -it namenode hdfs dfs -mkdir -p /lake/raw
-docker exec -it namenode hdfs dfs -ls /
-docker exec -it namenode hdfs dfsadmin -report
+**Phạm vi:** Hà Nội, Hải Phòng, Lào Cai, Huế, Đà Nẵng, Nha Trang, Đà Lạt, Buôn Ma Thuột, TP.HCM, Cần Thơ.
+
+## 🗂️ Mô hình dữ liệu
+
+**Medallion trên HDFS**
+
+| Tầng | Định dạng | Nội dung |
+|---|---|---|
+| `bronze/` | JSON | Response gốc từ API, không chỉnh sửa, phục vụ chạy lại |
+| `silver/` | Parquet, partition theo `year` | Dữ liệu theo giờ đã làm sạch, ép kiểu, chuẩn múi giờ `Asia/Ho_Chi_Minh` |
+| `gold/` | Parquet | Star schema phục vụ báo cáo |
+
+**Star schema (gold)**
+
+```mermaid
+erDiagram
+    dim_location ||--o{ fact_weather_daily : ""
+    dim_date ||--o{ fact_weather_daily : ""
+    dim_location {
+        int location_key
+        string city
+        string region
+        double latitude
+        double longitude
+        int elevation_m
+    }
+    dim_date {
+        int date_key
+        date full_date
+        int year
+        int month
+        string season
+    }
+    fact_weather_daily {
+        int date_key
+        int location_key
+        double temp_min
+        double temp_max
+        double temp_mean
+        double precipitation_sum
+        double wind_max
+        boolean is_hot_day
+    }
 ```
 
-### Spark: batch ETL (CSV → Parquet trên HDFS)
-```powershell
-docker exec -it spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark-jobs/etl_orders.py
-docker exec -it namenode hdfs dfs -ls /lake/gold/daily_revenue
-```
-Muốn gõ lệnh tương tác: `docker exec -it spark-master /opt/spark/bin/pyspark --master spark://spark-master:7077`
+## 🚀 Chạy nhanh
 
-### Kafka: tạo topic, gửi và nhận
-```powershell
-docker exec -it kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --topic orders --partitions 3 --replication-factor 1
-docker exec -it kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic orders --from-beginning
-```
-Bắn dữ liệu giả, chạy ở một cửa sổ khác:
-```powershell
-pip install kafka-python-ng
-python kafka/producer.py
+Cách nhanh nhất là **GitHub Codespaces** (không cần cài gì): bấm **Code → Codespaces → New with options → 4-core**, sau đó:
+
+```bash
+docker compose --profile hadoop --profile spark up -d
+docker compose ps
 ```
 
-### Spark Structured Streaming đọc Kafka (cần cả profile spark và kafka)
-```powershell
-docker exec -it spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 `
-  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3 `
-  --conf spark.jars.ivy=/tmp/.ivy2 `
-  /opt/spark-jobs/stream_orders.py
-```
+Chạy trên máy cá nhân với Docker Desktop, danh sách profile, Web UI và xử lý lỗi: xem [docs/SETUP.md](docs/SETUP.md).
 
-### Airflow: điều phối Spark job
-1. Bật profile `airflow` và `spark` (cộng thêm `hadoop` vì job ghi lên HDFS).
-2. Vào http://localhost:8080, bật DAG `orders_etl` rồi bấm Trigger.
-3. Xem log task `spark_etl`, mở http://localhost:8090 để thấy application đang chạy.
+## 📁 Cấu trúc thư mục
 
-DAG mới chỉ cần đặt file `.py` vào `airflow/dags/`, scheduler sẽ tự nhận.
-
-## 4. Cấu trúc thư mục
-
-```
+```text
 de-lab/
-├── docker-compose.yml
-├── hadoop.env            # cấu hình core/hdfs/yarn-site
+├── docker-compose.yml      # Cụm Hadoop, Spark, Kafka, Airflow (chia theo profile)
+├── hadoop.env              # Cấu hình core-site / hdfs-site / yarn-site
+├── .devcontainer/          # Cấu hình GitHub Codespaces
 ├── airflow/
-│   ├── Dockerfile        # Airflow + Java + Spark provider + pyspark
-│   ├── dags/
-│   └── logs/
-├── spark/jobs/           # mount vào /opt/spark-jobs
-├── kafka/producer.py
-└── data/orders.csv       # mount vào /opt/data
+│   ├── Dockerfile          # Airflow + Java + Spark provider
+│   └── dags/               # DAG điều phối pipeline
+├── spark/jobs/             # Spark batch & streaming jobs
+├── kafka/                  # Producer
+├── data/                   # Dữ liệu mẫu
+└── docs/                   # Tài liệu cài đặt, hình ảnh
 ```
 
-## 5. Lỗi hay gặp
+## 🗺️ Lộ trình
 
-- **Container bị kill / exit 137**: thiếu RAM. Bớt profile hoặc tăng `memory` trong `.wslconfig`.
-- **Port đã bị dùng**: sửa vế trái của `ports` trong compose, ví dụ `"18080:8080"`.
-- **Spark job từ Airflow treo ở "waiting for resources"**: worker đã hết core vì một job khác (pyspark shell, streaming) đang chiếm. Tắt job đó đi.
-- **Python version mismatch**: Airflow image cố ý dùng Python 3.10 để khớp với Spark worker, đừng đổi tag.
+- [x] **Giai đoạn 0 – Hạ tầng:** Docker Compose cho HDFS, Spark, Kafka, Airflow; chạy trên Codespaces
+- [ ] **Giai đoạn 1 – Ingest:** nạp dữ liệu lịch sử từ Open-Meteo vào HDFS bronze
+- [ ] **Giai đoạn 2 – Transform:** Spark bronze → silver → gold, trả lời câu hỏi 1–3
+- [ ] **Giai đoạn 3 – Orchestration:** DAG backfill + DAG hằng ngày, sinh báo cáo HTML
+- [ ] **Giai đoạn 4 – Streaming:** Kafka producer + Spark Streaming phát cảnh báo
+- [ ] **Giai đoạn 5 – Hoàn thiện:** câu hỏi 4–6, star schema, kiểm tra chất lượng dữ liệu
+
+## 📚 Nguồn dữ liệu
+
+Dữ liệu thời tiết từ [Open-Meteo](https://open-meteo.com/) (Historical Weather API dựa trên ERA5 reanalysis và Forecast API), giấy phép [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Số liệu là dữ liệu mô hình theo ô lưới nên có thể lệch nhẹ so với trạm đo thực tế.
+
+## 👤 Tác giả
+
+[lamntg3625@gmail.com](mailto:lamntg3625@gmail.com) · [GitHub @lamnt01](https://github.com/lamnt01)
