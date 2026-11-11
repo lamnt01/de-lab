@@ -1,0 +1,20 @@
+{
+  "name": "de-lab",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.10" }
+  },
+  "hostRequirements": { "cpus": 4, "memory": "16gb" },
+  "forwardPorts": [8080, 8085, 8090, 8091, 9870, 4040],
+  "portsAttributes": {
+    "8080": { "label": "Airflow" },
+    "8085": { "label": "Kafka UI" },
+    "8090": { "label": "Spark master" },
+    "8091": { "label": "Spark worker" },
+    "9870": { "label": "HDFS NameNode" },
+    "4040": { "label": "Spark job UI" }
+  },
+  // Airflow ghi log vào ./airflow/logs nên phải chạy bằng đúng uid của user trong Codespace
+  "postCreateCommand": "sed -i \"s/^AIRFLOW_UID=.*/AIRFLOW_UID=$(id -u)/\" .env && pip install kafka-python-ng"
+}
