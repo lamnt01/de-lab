@@ -13,7 +13,8 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__WEBSERVER__SECRET_KEY: de-lab-secret
-    AIRFLOW_CONN_SPARK_DEFAULT: spark://spark-master:7077
+    # Provider ghép master = host:port, nên host phải chứa sẵn scheme spark://
+    AIRFLOW_CONN_SPARK_DEFAULT: '{"conn_type": "spark", "host": "spark://spark-master", "port": 7077}'
     AIRFLOW_UID: ${AIRFLOW_UID:-50000}
     SPARK_CONF_DIR: /opt/spark-conf
   volumes:
