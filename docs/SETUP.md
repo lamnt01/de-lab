@@ -107,11 +107,17 @@ python kafka/producer.py
 
 ### Spark Structured Streaming đọc Kafka (cần cả profile spark và kafka)
 ```powershell
-docker exec -it spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 `
-  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3 `
-  --conf spark.jars.ivy=/tmp/.ivy2 `
-  /opt/spark-jobs/stream_orders.py
+docker exec -it spark-master /opt/spark/bin/spark-submit /opt/spark-jobs/stream_orders.py
 ```
+Kafka connector và Delta Lake đã khai báo trong `spark/conf/spark-defaults.conf` (`spark.jars.packages`).
+Đừng thêm `--packages` trên dòng lệnh: nó ghi đè giá trị trong file cấu hình, job sẽ mất Delta Lake hoặc Kafka.
+
+### Delta Lake: kiểm tra lakehouse (cần profile hadoop và spark)
+```powershell
+docker exec -it spark-master /opt/spark/bin/spark-submit /opt/spark-jobs/delta_smoke.py
+```
+Kết quả đúng: bảng hiện tại có `danang 27.0, hanoi 25.5, hue 26.0`; bản version 0 có `hanoi 24.0, hue 26.0`; lịch sử có `WRITE` và `MERGE`.
+Lần đầu chạy sẽ tải jar Delta/Kafka về `/tmp/.ivy2` nên mất thêm khoảng 1 phút.
 
 ### Airflow: điều phối Spark job
 1. Bật profile `airflow` và `spark` (cộng thêm `hadoop` vì job ghi lên HDFS).
