@@ -52,7 +52,15 @@ def build_params(city: dict, year: int) -> dict:
     # TODO 1: trả về dict gồm latitude, longitude, start_date, end_date, hourly, timezone
     #   - start_date/end_date dạng "YYYY-MM-DD"
     #   - hourly: Open-Meteo nhận chuỗi các biến nối bằng dấu phẩy (gợi ý: ",".join(...))
-    raise NotImplementedError
+    return {
+        "latitude": city["name"],
+        "longitude": city["name"],
+        "start_date": f"{year}-01-01",
+        "end_date": f"{year}-12-31",
+        "hourly": HOURLY_VARS,
+        "timezone": TIMEZONE
+    }
+    
 
 
 def fetch_year(city: dict, year: int) -> dict:
