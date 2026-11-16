@@ -15,6 +15,16 @@
     "9870": { "label": "HDFS NameNode" },
     "4040": { "label": "Spark job UI" }
   },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-containers",
+        "mechatroner.rainbow-csv"
+      ]
+    }
+  },
   // Airflow ghi log vào ./airflow/logs nên phải chạy bằng đúng uid của user trong Codespace
   "postCreateCommand": "sed -i \"s/^AIRFLOW_UID=.*/AIRFLOW_UID=$(id -u)/\" .env && pip install kafka-python-ng"
 }

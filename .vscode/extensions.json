@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "redhat.vscode-yaml",
+    "ms-azuretools.vscode-containers",
+    "mechatroner.rainbow-csv",
+    "github.codespaces"
+  ]
+}
