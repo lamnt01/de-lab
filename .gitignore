@@ -2,3 +2,5 @@ airflow/logs/*
 !airflow/logs/.gitkeep
 __pycache__/
 *.pyc
+# dữ liệu tải từ API (~150 MB), tải lại được bằng ingest/fetch_history.py
+data/landing/

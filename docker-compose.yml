@@ -29,6 +29,8 @@ x-airflow-common: &airflow-common
 x-hadoop-common: &hadoop-common
   image: apache/hadoop:3.3.6
   env_file: ./hadoop.env
+  volumes:
+    - ./data:/opt/data:ro   # để `hdfs dfs -put` đọc được file đã tải về máy
 
 services:
   # ---------------- Hadoop ----------------

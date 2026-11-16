@@ -26,5 +26,5 @@
     }
   },
   // Airflow ghi log vào ./airflow/logs nên phải chạy bằng đúng uid của user trong Codespace
-  "postCreateCommand": "sed -i \"s/^AIRFLOW_UID=.*/AIRFLOW_UID=$(id -u)/\" .env && pip install kafka-python-ng"
+  "postCreateCommand": "sed -i \"s/^AIRFLOW_UID=.*/AIRFLOW_UID=$(id -u)/\" .env && pip install kafka-python-ng requests"
 }
