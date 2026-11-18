@@ -5,10 +5,12 @@ Mỗi lần gọi API = 1 thành phố x 1 năm, lưu nguyên response JSON (kh�
 
 Chạy (trong Codespace, thư mục gốc repo):
     python ingest/fetch_history.py --cities hanoi --start-year 2024 --end-year 2024   # thử 1 file
-    python ingest/fetch_history.py                                                    # toàn bộ 10 x 21 năm
+    # toàn bộ 10 x 21 năm
+    python ingest/fetch_history.py
 
 Sau đó đẩy lên HDFS bronze bằng ingest/load_bronze.sh.
 """
+
 import argparse
 import json
 import sys
@@ -44,7 +46,9 @@ SLEEP_SECONDS = 20
 
 MAX_RETRIES = 3
 TIMEOUT_SECONDS = 60
-DEFAULT_OUT = Path(__file__).resolve().parent.parent / "data" / "landing" / "weather_history"
+DEFAULT_OUT = (
+    Path(__file__).resolve().parent.parent / "data" / "landing" / "weather_history"
+)
 
 
 def build_params(city: dict, year: int) -> dict:
@@ -53,14 +57,13 @@ def build_params(city: dict, year: int) -> dict:
     #   - start_date/end_date dạng "YYYY-MM-DD"
     #   - hourly: Open-Meteo nhận chuỗi các biến nối bằng dấu phẩy (gợi ý: ",".join(...))
     return {
-        "latitude": city["name"],
-        "longitude": city["name"],
+        "latitude": city["lat"],
+        "longitude": city["lon"],
         "start_date": f"{year}-01-01",
         "end_date": f"{year}-12-31",
         "hourly": HOURLY_VARS,
-        "timezone": TIMEZONE
+        "timezone": TIMEZONE,
     }
-    
 
 
 def fetch_year(city: dict, year: int) -> dict:
@@ -73,14 +76,36 @@ def fetch_year(city: dict, year: int) -> dict:
     #   Status 400 (tham số sai) thì KHÔNG thử lại: lỗi do mình, thử lại vẫn sai -> raise luôn
     #   Gợi ý: response.status_code, response.raise_for_status(), response.json()
     # Câu hỏi tự trả lời: vì sao chờ tăng dần thay vì chờ cố định?
-    raise NotImplementedError
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            print(f"Thử lần {attempt + 1}/{MAX_RETRIES}: {city['name']} {year}")
+            response = requests.get(
+                ARCHIVE_URL, params=build_params(city, year), timeout=TIMEOUT_SECONDS
+            )
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            print(f"Lỗi kết nối: {e}")
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(2**attempt * 5)
+        else:
+            if response.status_code == 429 or response.status_code >= 500:
+                print(f"Lỗi phía server / vượt giới hạn: HTTP {response.status_code}")
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(2**attempt * 5)
+            else:
+                response.raise_for_status()
+                data = response.json()
+                return data
+
+    raise RuntimeError(f"Thất bại sau {MAX_RETRIES} lần thử: {city['name']} {year}")
 
 
 def output_path(out_dir: Path, city: dict, year: int) -> Path:
     """Đường dẫn file kiểu partition Hive: <out_dir>/city=<slug>/year=<yyyy>/data.json"""
     # TODO 4: dựng Path theo đúng mẫu trên (gợi ý: toán tử / của pathlib)
     # Câu hỏi tự trả lời: vì sao đặt tên thư mục dạng "city=hanoi" thay vì "hanoi"?
-    raise NotImplementedError
+
+    return out_dir / f"city={city['slug']}" / f"year={year}" / "data.json"
 
 
 def save_json(data: dict, path: Path) -> None:
@@ -91,11 +116,18 @@ def save_json(data: dict, path: Path) -> None:
     #     ghi xong mới đổi tên sang path (gợi ý: Path.replace)
     #   - json.dump(..., ensure_ascii=False)
     # Câu hỏi tự trả lời: nếu ghi thẳng vào path mà bị Ctrl+C giữa chừng thì lần chạy sau sẽ sao?
-    raise NotImplementedError
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+    tmp.replace(path)
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Tải dữ liệu thời tiết lịch sử từ Open-Meteo")
+    p = argparse.ArgumentParser(
+        description="Tải dữ liệu thời tiết lịch sử từ Open-Meteo"
+    )
     p.add_argument("--cities", nargs="*", help="slug thành phố, bỏ trống = cả 10")
     p.add_argument("--start-year", type=int, default=2005)
     p.add_argument("--end-year", type=int, default=2025)
@@ -108,7 +140,9 @@ def main() -> None:
     args = parse_args()
     cities = [c for c in CITIES if not args.cities or c["slug"] in args.cities]
     years = range(args.start_year, args.end_year + 1)
-    print(f"{len(cities)} thành phố x {len(years)} năm = {len(cities) * len(years)} request")
+    print(
+        f"{len(cities)} thành phố x {len(years)} năm = {len(cities) * len(years)} request"
+    )
 
     done = skipped = failed = 0
     # TODO 6: lặp qua từng thành phố, từng năm:
@@ -118,6 +152,26 @@ def main() -> None:
     #   - 1 request lỗi (đã hết lượt thử) thì in lỗi, failed += 1 rồi chạy tiếp, không dừng cả chương trình
     #   - sau mỗi lần GỌI API (kể cả lỗi) thì time.sleep(SLEEP_SECONDS)
     # Câu hỏi tự trả lời: nhờ bước "bỏ qua file đã có", chạy lại script nhiều lần có bị trùng dữ liệu không?
+
+    for city in cities:
+        for year in years:
+            path = output_path(args.out, city, year)
+            if not args.force and path.exists():
+                skipped += 1
+            else:
+                try:
+                    data = fetch_year(city, year)
+                except (RuntimeError, requests.exceptions.RequestException) as e:
+                    print(e)
+                    failed += 1
+                else:
+                    save_json(data, path)
+                    print(
+                        f"{city['name']} {year} số dòng: {len(data['hourly']['time'])}"
+                    )
+                    done += 1
+                finally:
+                    time.sleep(SLEEP_SECONDS)
 
     print(f"Xong: tải {done}, bỏ qua {skipped}, lỗi {failed}")
     if failed:
