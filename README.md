@@ -9,11 +9,11 @@ Pipeline dữ liệu end-to-end phân tích **khí hậu 20 năm (2005–2025)**
 ![Airflow](https://img.shields.io/badge/Airflow-2.10.5-017CEE?logo=apacheairflow&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white)
 
-> 🚧 **Đang phát triển.** Hạ tầng đã dựng xong, các pipeline đang được xây dựng theo lộ trình bên dưới.
+> 🚧 **Đang phát triển.** Đã xong hạ tầng và ingest dữ liệu lịch sử vào HDFS bronze; đang làm Giai đoạn 2 (transform). Tiến độ chi tiết ở mục [Lộ trình](#️-lộ-trình).
 
 ## ✨ Điểm nổi bật
 
-- **Batch:** xử lý ~1,75 triệu bản ghi thời tiết theo giờ bằng Spark, lưu trên lakehouse (HDFS + Delta Lake) theo kiến trúc medallion: có ACID, MERGE và time travel ngay trên data lake.
+- **Batch:** xử lý ~1,84 triệu bản ghi thời tiết theo giờ bằng Spark, lưu trên lakehouse (HDFS + Delta Lake) theo kiến trúc medallion: có ACID, MERGE và time travel ngay trên data lake.
 - **Streaming:** thu thập thời tiết hiện tại mỗi 15 phút qua Kafka, Spark Structured Streaming phát cảnh báo nắng nóng, mưa lớn, gió mạnh.
 - **Orchestration:** Airflow điều phối backfill 20 năm và pipeline hằng ngày (ingest → transform → kiểm tra chất lượng → báo cáo).
 - **Hạ tầng dạng code:** toàn bộ cụm chạy bằng Docker Compose, mở được trên GitHub Codespaces mà không cần cài đặt.
@@ -149,7 +149,9 @@ de-lab/
 ## 🗺️ Lộ trình
 
 - [x] **Giai đoạn 0 – Hạ tầng:** Docker Compose cho HDFS, Spark, Kafka, Airflow; chạy trên Codespaces
-- [ ] **Giai đoạn 1 – Ingest:** nạp dữ liệu lịch sử từ Open-Meteo vào HDFS bronze
+- [x] **Giai đoạn 1 – Ingest:** nạp dữ liệu lịch sử từ Open-Meteo vào HDFS bronze
+  - 210 file JSON (10 thành phố × 21 năm, 2005–2025), ~1,84 triệu bản ghi theo giờ, ~105 MB, partition kiểu Hive `city=<slug>/year=<yyyy>`
+  - Ingest có retry khi timeout, ghi file atomic (file tạm rồi đổi tên), bỏ qua file đã tải nên chạy lại được an toàn
 - [ ] **Giai đoạn 2 – Transform:** Spark bronze → silver → gold (Delta Lake), trả lời câu hỏi 1–3
 - [ ] **Giai đoạn 3 – Orchestration:** DAG backfill + DAG hằng ngày, sinh báo cáo HTML
 - [ ] **Giai đoạn 4 – Streaming:** Kafka producer + Spark Streaming phát cảnh báo

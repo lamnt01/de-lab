@@ -14,6 +14,7 @@ DST=/lake/bronze/weather_history          # đường dẫn trên HDFS
 #   Gợi ý: docker exec namenode hdfs dfs -mkdir -p ...
 
 hdfs() { docker exec namenode hdfs "$@"; }
+hdfs dfsadmin -safemode wait   # chờ namenode thoát safe mode mới ghi được
 hdfs dfs -mkdir -p "$DST"
 
 # TODO 8: copy toàn bộ cây thư mục SRC vào DST, ghi đè file trùng tên
