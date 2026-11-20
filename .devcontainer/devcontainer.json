@@ -5,7 +5,8 @@
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/python:1": { "version": "3.10" }
   },
-  "hostRequirements": { "cpus": 4, "memory": "16gb" },
+  // Tối thiểu 2-core/8 GB để tiết kiệm quota (120 core-giờ/tháng ≈ 60 giờ). Cần --profile all thì đổi máy sang 4-core.
+  "hostRequirements": { "cpus": 2, "memory": "8gb" },
   "forwardPorts": [8080, 8085, 8090, 8091, 9870, 4040],
   "portsAttributes": {
     "8080": { "label": "Airflow" },

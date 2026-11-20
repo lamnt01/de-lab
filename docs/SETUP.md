@@ -34,14 +34,26 @@ docker compose version
 ### Không có quyền Admin: chạy trên GitHub Codespaces
 
 1. Đẩy thư mục này lên một repo GitHub (để private cũng được).
-2. Trên trang repo, bấm **Code → Codespaces → ⋯ → New with options**, chọn máy **4-core**, rồi **Create codespace**.
+2. Trên trang repo, bấm **Code → Codespaces → ⋯ → New with options**, chọn máy **2-core** (mặc định), rồi **Create codespace**.
 3. Chờ Codespace dựng xong (lần đầu khoảng 3–5 phút). Mở Terminal ngay trong trình duyệt và chạy các lệnh ở mục 2 bên dưới.
    Thay `docker exec -it ...` bằng đúng lệnh đó, chỉ khác là chạy trong terminal Linux, nên đổi ký tự xuống dòng `` ` `` thành `\`.
 4. Mở tab **Ports** để vào các Web UI.
 5. Làm xong thì **Stop codespace** (menu Codespaces trên github.com) để không tốn quota.
    Mặc định Codespace tự dừng sau 30 phút không dùng.
 
-Gói miễn phí có 120 core-giờ/tháng. Máy 4-core tương đương khoảng 30 giờ chạy.
+Gói miễn phí có 120 core-giờ và 15 GB-tháng lưu trữ mỗi tháng. Máy 2-core dùng được khoảng **60 giờ**, máy 4-core chỉ khoảng 30 giờ.
+Hết quota thì Codespace bị dừng với thông báo lỗi billing, phải chờ sang chu kỳ mới hoặc đặt spending limit.
+
+**Máy 2-core (8 GB RAM)** đủ cho từng giai đoạn nếu chỉ bật profile cần dùng (xem bảng RAM ở mục 2):
+
+| Giai đoạn | Profile | RAM |
+|---|---|---|
+| GĐ1–2: ingest, Spark batch | `hadoop` + `spark` | ~4 GB |
+| GĐ3: Airflow gọi Spark | `hadoop` + `spark` + `airflow` | ~6.5 GB (sát giới hạn, tắt Kafka) |
+| GĐ4: streaming | `hadoop` + `spark` + `kafka` | ~5.5 GB |
+
+`--profile all` (~8–9 GB) **không chạy được** trên máy 2-core. Khi thật sự cần thì đổi máy: github.com/codespaces → `⋯` → **Change machine type** → 4-core, xong việc đổi lại.
+Đổi giai đoạn thì `down` profile cũ trước khi `up` profile mới.
 
 ## 2. Chạy theo profile
 
@@ -54,7 +66,7 @@ Mọi lệnh dưới đây chạy trong thư mục `C:\Users\Ngs-MT681\de-lab`.
 | `spark` | Spark master + 1 worker (2 core, 2 GB) | ~3 GB |
 | `kafka` | Kafka KRaft (1 broker) + Kafka UI | ~1.5 GB |
 | `airflow` | Postgres + webserver + scheduler | ~2.5 GB |
-| `all` | tất cả trừ yarn | ~8–9 GB |
+| `all` | tất cả trừ yarn | ~8–9 GB (cần máy 4-core) |
 
 ```powershell
 docker compose --profile hadoop --profile spark up -d     # học Spark + HDFS

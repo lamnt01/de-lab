@@ -119,7 +119,7 @@ erDiagram
 
 ## 🚀 Chạy nhanh
 
-Cách nhanh nhất là **GitHub Codespaces** (không cần cài gì): bấm **Code → Codespaces → New with options → 4-core**, sau đó:
+Cách nhanh nhất là **GitHub Codespaces** (không cần cài gì): bấm **Code → Codespaces → New with options → 2-core**, sau đó:
 
 ```bash
 docker compose --profile hadoop --profile spark up -d
