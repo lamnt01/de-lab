@@ -20,6 +20,7 @@
     "vscode": {
       "extensions": [
         "ms-python.python",
+        "ms-python.vscode-pylance",
         "charliermarsh.ruff",
         "redhat.vscode-yaml",
         "ms-azuretools.vscode-containers",
@@ -27,6 +28,7 @@
       ]
     }
   },
+  // pyspark, delta-spark: chỉ để Pylance gợi ý code (job vẫn chạy bằng spark-submit trong container); phải khớp phiên bản cluster
   // Airflow ghi log vào ./airflow/logs nên phải chạy bằng đúng uid của user trong Codespace
-  "postCreateCommand": "sed -i \"s/^AIRFLOW_UID=.*/AIRFLOW_UID=$(id -u)/\" .env && pip install kafka-python-ng requests"
+  "postCreateCommand": "sed -i \"s/^AIRFLOW_UID=.*/AIRFLOW_UID=$(id -u)/\" .env && pip install kafka-python-ng requests pyspark==3.5.3 delta-spark==3.3.3"
 }
