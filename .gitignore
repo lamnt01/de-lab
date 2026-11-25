@@ -5,3 +5,6 @@ __pycache__/
 # dữ liệu tải từ API (~110 MB), tải lại được bằng ingest/fetch_history.py
 data/landing/
 *.log
+
+# Python venv (local, chi de Pylance goi y)
+.venv/
