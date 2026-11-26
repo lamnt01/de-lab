@@ -8,8 +8,6 @@ Ra  : /lake/silver/weather_hourly   (Delta, partition theo year THEO GIỜ VIỆ
 Chạy: docker exec -it spark-master /opt/spark/bin/spark-submit /opt/spark-jobs/bronze_to_silver.py
 """
 
-from itertools import count
-
 from delta.tables import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
@@ -61,22 +59,16 @@ def explode_hourly(df: DataFrame) -> DataFrame:
     #   Gợi ý: tạo danh sách cột bằng list comprehension trên ["time"] + HOURLY_VARS
     #   Câu hỏi tự kiểm tra: vì sao KHÔNG explode từng mảng riêng rồi join lại?
     #   Bỏ cột "year" từ tên thư mục: đó là năm GMT, sẽ tính lại năm theo giờ VN ở bước sau.
+
+    # TODO: duyệt ["time"] + HOURLY_VARS
+    # dấu * bung list thành từng tham số
+
+    zip_cols = [F.col(f"hourly.{i}") for i in HOURLY_VARS]
+
     return df.select(
         "city",
-        "elevation",  # cột đơn (1 giá trị/file) → chọn thẳng, KHÔNG zip
-        F.explode(
-            F.arrays_zip(
-                F.col("hourly.time"),
-                F.col("hourly.temperature_2m"),
-                F.col("hourly.relative_humidity_2m"),
-                F.col("hourly.apparent_temperature"),
-                F.col("hourly.precipitation"),
-                F.col("hourly.weather_code"),
-                F.col("hourly.cloud_cover"),
-                F.col("hourly.wind_speed_10m"),
-                F.col("hourly.wind_gusts_10m"),
-            )
-        ).alias("h"),  # các mảng (gồm cả hourly.time) → zip + explode
+        "elevation",
+        F.explode(F.arrays_zip(*zip_cols)).alias("h"),
     ).select("city", "elevation", "h.*")
 
 
@@ -127,6 +119,7 @@ def check_quality(df: DataFrame) -> None:
         F.count("*").alias("total"),
         F.countDistinct("city", "ts_utc").alias("total_distinct"),
         F.sum(F.col("ts_utc").isNull().cast("int")).alias("num_utc_null"),
+        F.sum(F.col("region").isNull().cast("int")).alias("num_region_null"),
         F.sum(F.col("temperature_2m").isNull().cast("int")).alias(
             "num_temperature_2m_null"
         ),
@@ -152,19 +145,25 @@ def check_quality(df: DataFrame) -> None:
     bad = counts.filter(F.col("count") != F.col("expected"))
     print(row_check)
 
+    errors = []
     if row_check["total"] - row_check["total_distinct"] > 0:
-        raise ValueError("Lỗi: Có bản ghi bị trùng")
+        errors.append("Lỗi: Có bản ghi bị trùng")
     elif row_check["num_utc_null"] > 0:
-        raise ValueError("Lỗi: ts_utc có bản ghi null")
+        errors.append("Lỗi: ts_utc có bản ghi null")
     elif row_check["num_temperature_2m_null"] > 0:
-        raise ValueError("Lỗi: temperature_2m có bản ghi null")
+        errors.append("Lỗi: temperature_2m có bản ghi null")
     elif row_check["num_temperature_2m_out_range"] > 0:
-        raise ValueError("Lỗi: temperature_2m nằm ngoài khoảng [-10,50]")
+        errors.append("Lỗi: temperature_2m nằm ngoài khoảng [-10,50]")
     elif row_check["num_precipitation_lo_0"] > 0:
-        raise ValueError("Lỗi: precipitation nhỏ hơn 0")
+        errors.append("Lỗi: precipitation nhỏ hơn 0")
+    elif row_check["num_region_null"] > 0:
+        errors.append("Lỗi: region có bản ghi null")
     elif bad.count() > 0:
         bad.show()
-        raise ValueError("Lỗi: số giờ theo thành phố và năm bị thiếu")
+        errors.append("Lỗi: số giờ theo thành phố và năm bị thiếu")
+
+    if errors:
+        raise ValueError("\n".join(errors))
 
 
 def write_silver(spark: SparkSession, df: DataFrame) -> None:
@@ -177,11 +176,11 @@ def write_silver(spark: SparkSession, df: DataFrame) -> None:
     #           .merge(df.alias("s"), "<điều kiện khớp khóa>")
     #           .whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
     #   Câu hỏi tự kiểm tra: MERGE khác mode("overwrite") ở điểm nào khi chỉ nạp lại 1 thành phố?
-    if DeltaTable.isDeltaTable(spark, SILVER) == False:
+    if not DeltaTable.isDeltaTable(spark, SILVER):
         df.write.format("delta").partitionBy("year").save(SILVER)
     else:
         DeltaTable.forPath(spark, SILVER).alias("t").merge(
-            df.alias("s"), "t.city = s.city AND t.ts_utc = s.ts_utc"
+            df.alias("s"), "t.city = s.city AND t.ts_utc = s.ts_utc AND t.year = s.year"
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
 
@@ -195,8 +194,11 @@ def main() -> None:
 
     raw = read_bronze(spark)
     hourly = explode_hourly(raw)
+    hourly.printSchema()  # ← thêm tạm; xem tên field có phải time, temperature_2m... không
+
     silver = add_time_columns(hourly)
     silver.cache()  # check_quality và write_silver cùng dùng -> không tính lại từ JSON 2 lần
+
     check_quality(silver)
     write_silver(spark, silver)
 
